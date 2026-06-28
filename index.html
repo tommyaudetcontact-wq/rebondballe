@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeu de Rebond V2.1 - Collision Sphère Bleue</title>
+    <title>Jeu de Rebond V3.5 - Tracking Spatial Stable</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <style>
@@ -12,6 +12,7 @@
             overflow-x: hidden;
             touch-action: manipulation;
             user-select: none;
+            color: #ffffff;
         }
         .game-area {
             position: relative;
@@ -31,7 +32,7 @@
             object-fit: cover;
             opacity: 0.35;
         }
-        /* BALLON CSS BOOSTÉ PAR LE GPU */
+        /* BALLON DYNAMIQUE */
         #ball {
             position: absolute;
             width: 80px;
@@ -48,13 +49,11 @@
         #ball.hit {
             background: radial-gradient(circle at 30% 30%, #a3ffb4, #198754 40%, #0b4124);
         }
-        /* GROS CURSEURS DE MAINS (80px) AVEC LESQUELS LE BALLON INTERAGIT */
+        /* LES SPHÈRES DE JEU */
         .hand-cursor {
             position: absolute;
             width: 80px; 
             height: 80px;
-            background: rgba(13, 202, 240, 0.35);
-            border: 3px dashed #0dcaf0;
             border-radius: 50%;
             z-index: 12;
             pointer-events: none;
@@ -63,47 +62,76 @@
             top: 0;
             will-change: transform;
         }
+        .color-p1 {
+            background: rgba(13, 202, 240, 0.35);
+            border: 3px dashed #0dcaf0;
+        }
+        .color-p2 {
+            background: rgba(255, 65, 54, 0.35);
+            border: 3px dashed #ff4136;
+        }
         #loadingOverlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.93);
             z-index: 20;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            padding: 20px;
+        }
+        .text-white-score {
+            color: #ffffff !important;
+            font-weight: 800;
         }
     </style>
 </head>
-<body class="text-white py-4">
+<body class="py-4">
 
     <div class="container text-center">
-        <h1 class="display-5 fw-bold text-success mb-1">⚽ REBOND V2.1 ⚽</h1>
-        <p class="lead text-muted mb-3">Collision exclusive entre le ballon et la sphère bleue !</p>
+        <h1 class="display-5 fw-bold text-warning mb-1">⚽ COMPÉTITION REBONDS V3.5 ⚽</h1>
+        <p class="lead text-muted mb-3" id="gameSub">Sélectionne ton mode pour commencer</p>
 
         <div class="row justify-content-center mb-3">
-            <div class="col-md-4 col-6">
-                <div class="card bg-dark border-success text-white p-2">
-                    <small class="text-muted uppercase">Vitesse actuelle</small>
-                    <h4 class="m-0 text-info" id="speedField">100%</h4>
+            <div id="colSoloScore" class="col-md-4 col-6">
+                <div class="card bg-dark border-secondary p-2">
+                    <small class="text-muted">REBONDS TOTAL</small>
+                    <h4 class="m-0 text-white-score" id="scoreField">0</h4>
                 </div>
             </div>
-            <div class="col-md-4 col-6">
-                <div class="card bg-dark border-warning text-white p-2">
-                    <small class="text-muted uppercase">Score</small>
-                    <h4 class="m-0 text-warning" id="scoreField">0</h4>
+            <div id="colPlayer1Score" class="col-md-3 col-6 d-none">
+                <div class="card bg-dark border-info p-2">
+                    <small class="text-info">JOUEUR 1 (BLEU)</small>
+                    <h4 class="m-0 text-white-score" id="scoreJ1Field">0</h4>
+                </div>
+            </div>
+            <div id="colPlayer2Score" class="col-md-3 col-6 d-none">
+                <div class="card bg-dark border-danger p-2">
+                    <small class="text-danger">JOUEUR 2 (ROUGE)</small>
+                    <h4 class="m-0 text-white-score" id="scoreJ2Field">0</h4>
+                </div>
+            </div>
+            <div class="col-md-2 col-6 mt-2 mt-md-0">
+                <div class="card bg-dark border-success p-2">
+                    <small class="text-muted">VITESSE</small>
+                    <h4 class="m-0 text-white-score" id="speedField">100%</h4>
                 </div>
             </div>
         </div>
 
-        <div class="game-area border border-success rounded shadow-lg">
+        <div class="game-area border border-warning rounded shadow-lg">
             <div id="loadingOverlay">
-                <div id="spinner" class="spinner-border text-success mb-3" role="status"></div>
-                <h4 id="statusText">Configuration de la physique des sphères...</h4>
-                <button id="startBtn" class="btn btn-success btn-lg d-none fw-bold">JOUER</button>
+                <div id="spinner" class="spinner-border text-warning mb-3" role="status"></div>
+                <h4 id="statusText" class="mb-4">Calcul des scripts IA...</h4>
+                
+                <div id="menuButtons" class="d-none">
+                    <button id="btn1P" class="btn btn-info btn-lg fw-bold text-dark m-2 px-4 py-3">👤 1 JOUEUR (Solo)</button>
+                    <button id="btn2P" class="btn btn-danger btn-lg fw-bold m-2 px-4 py-3">👥 2 JOUEURS (Match)</button>
+                </div>
             </div>
 
             <video id="webcam" autoplay playsinline></video>
@@ -118,24 +146,36 @@
 
         const video = document.getElementById('webcam');
         const ballEl = document.getElementById('ball');
-        const startBtn = document.getElementById('startBtn');
         const loadingOverlay = document.getElementById('loadingOverlay');
         const statusText = document.getElementById('statusText');
         const spinner = document.getElementById('spinner');
         const scoreField = document.getElementById('scoreField');
+        const scoreJ1Field = document.getElementById('scoreJ1Field');
+        const scoreJ2Field = document.getElementById('scoreJ2Field');
         const speedField = document.getElementById('speedField');
+        const gameSub = document.getElementById('gameSub');
         
+        const colSoloScore = document.getElementById('colSoloScore');
+        const colPlayer1Score = document.getElementById('colPlayer1Score');
+        const colPlayer2Score = document.getElementById('colPlayer2Score');
+
+        const btn1P = document.getElementById('btn1P');
+        const btn2P = document.getElementById('btn2P');
+        const menuButtons = document.getElementById('menuButtons');
         const handDivs = [document.getElementById('hand0'), document.getElementById('hand1')];
 
         let handLandmarker = undefined;
         let lastVideoTime = -1;
-        let score = 0;
+        let scoreSolo = 0;
+        let scoreJ1 = 0;
+        let scoreJ2 = 0;
         let frameCount = 0;
         let lastHandsData = [];
+        let gameMode = 1; 
+        let isGameOverAnnulling = false;
 
         const GAME_WIDTH = 640;
         const GAME_HEIGHT = 480;
-
         const INITIAL_BOUNCE = -8.0;
         const INITIAL_GRAVITY = 0.22;
 
@@ -147,10 +187,10 @@
             hitTimer: 0    
         };
 
-        // Stockage des positions réelles des boules bleues pour la physique
-        let liveCursors = [
-            { active: false, x: 0, y: 0 },
-            { active: false, x: 0, y: 0 }
+        // STRUCTURE DE CAPTURE STABLE AVEC COOLDOWN ET REGISTRE DE POSITION PERSISTANT
+        let playersTracker = [
+            { id: 0, active: false, x: 160, y: 240, cooldown: 0, lastSeen: 0 }, // J1 (Initialisé à gauche)
+            { id: 1, active: false, x: 480, y: 240, cooldown: 0, lastSeen: 0 }  // J2 (Initialisé à droite)
         ];
 
         async function initIA() {
@@ -167,15 +207,33 @@
                     minHandPresenceConfidence: 0.4
                 });
                 spinner.classList.add('d-none');
-                statusText.innerText = "Physique 2.1 connectée !";
-                startBtn.classList.remove('d-none');
+                statusText.innerText = "Choisis ton mode de jeu :";
+                menuButtons.classList.remove('d-none');
             } catch (err) {
-                statusText.innerText = "Erreur CDN : " + err;
+                statusText.innerText = "Erreur de chargement : " + err;
             }
         }
 
-        startBtn.addEventListener('pointerdown', async (e) => {
-            e.preventDefault();
+        async function launchGame(mode) {
+            gameMode = mode;
+            menuButtons.classList.add('d-none');
+            spinner.classList.remove('d-none');
+            statusText.innerText = "Ouverture de la caméra...";
+
+            if (gameMode === 1) {
+                colSoloScore.classList.remove('d-none');
+                colPlayer1Score.classList.add('d-none');
+                colPlayer2Score.classList.add('d-none');
+                gameSub.innerText = "🔵 Mode Solo : Fais le max de rebonds !";
+            } else {
+                colSoloScore.classList.add('d-none');
+                colPlayer1Score.classList.remove('d-none');
+                colPlayer2Score.classList.remove('d-none');
+                gameSub.innerText = "⚔️ Match : Le joueur avec le plus de rebonds gagne !";
+            }
+
+            resetScores();
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { width: 320, height: 240, frameRate: { ideal: 30 } } 
@@ -184,14 +242,68 @@
                 video.addEventListener('loadeddata', () => {
                     loadingOverlay.classList.add('d-none');
                     resetBall();
+                    isGameOverAnnulling = false;
                     requestAnimationFrame(gameLoop);
                 });
             } catch (err) {
-                alert("Erreur d'autorisation caméra.");
+                alert("Erreur de caméra.");
             }
-        });
+        }
+
+        function resetScores() {
+            scoreSolo = 0;
+            scoreJ1 = 0;
+            scoreJ2 = 0;
+            scoreField.innerText = "0";
+            scoreJ1Field.innerText = "0";
+            scoreJ2Field.innerText = "0";
+            ball.bounceForce = INITIAL_BOUNCE;
+            ball.gravity = INITIAL_GRAVITY;
+            speedField.innerText = "100%";
+            // Reset position trackers par défaut
+            playersTracker[0].x = 160; playersTracker[0].y = 240; playersTracker[0].cooldown = 0;
+            playersTracker[1].x = 480; playersTracker[1].y = 240; playersTracker[1].cooldown = 0;
+        }
+
+        btn1P.addEventListener('pointerdown', (e) => { e.preventDefault(); launchGame(1); });
+        btn2P.addEventListener('pointerdown', (e) => { e.preventDefault(); launchGame(2); });
+
+        function triggerGameOver() {
+            isGameOverAnnulling = true;
+            spinner.classList.add('d-none');
+            
+            if (gameMode === 2) {
+                if (scoreJ1 > scoreJ2) {
+                    statusText.innerHTML = "<span class='text-info display-6 fw-bold'>🏆 LE JOUEUR 1 GAGNE !</span><br><br>Match terminé.";
+                } else if (scoreJ2 > scoreJ1) {
+                    statusText.innerHTML = "<span class='text-danger display-6 fw-bold'>🏆 LE JOUEUR 2 GAGNE !</span><br><br>Match terminé.";
+                } else {
+                    statusText.innerHTML = "<span class='text-white display-6 fw-bold'>🤝 ÉGALITÉ PARFAITE !</span><br><br>Bien joué à vous deux.";
+                }
+            } else {
+                statusText.innerHTML = "<span class='text-warning display-6 fw-bold'>💥 BALLE AU SOL !</span><br><br>Score final : " + scoreSolo;
+            }
+
+            loadingOverlay.classList.remove('d-none');
+            
+            handDivs[0].style.display = "none";
+            handDivs[1].style.display = "none";
+            playersTracker[0].active = false;
+            playersTracker[1].active = false;
+            
+            setTimeout(() => {
+                loadingOverlay.classList.add('d-none');
+                resetScores();
+                resetBall();
+                lastHandsData = []; 
+                isGameOverAnnulling = false;
+                requestAnimationFrame(gameLoop);
+            }, 2000);
+        }
 
         function gameLoop() {
+            if (isGameOverAnnulling) return; 
+
             frameCount++;
 
             if (frameCount % 2 === 0 && video.currentTime !== lastVideoTime) {
@@ -204,7 +316,7 @@
                 }
             }
 
-            // --- DEPLACEMENT PHYSIQUE DU BALLON ---
+            // --- PHYSIQUE ---
             ball.vy += ball.gravity; 
             ball.x += ball.vx;
             ball.y += ball.vy;
@@ -214,74 +326,146 @@
             if (ball.y - ball.radius < 0) { ball.y = ball.radius; ball.vy *= -1; }
 
             if (ball.y > GAME_HEIGHT - ball.radius) {
-                score = 0;
-                scoreField.innerText = score;
-                ball.bounceForce = INITIAL_BOUNCE;
-                ball.gravity = INITIAL_GRAVITY;
-                speedField.innerText = "100%";
-                resetBall();
+                triggerGameOver();
+                return;
             }
 
-            // Reset des états des curseurs pour cette frame
-            liveCursors[0].active = false;
-            liveCursors[1].active = false;
+            // Gestion cooldowns
+            if (playersTracker[0].cooldown > 0) playersTracker[0].cooldown--;
+            if (playersTracker[1].cooldown > 0) playersTracker[1].cooldown--;
+
+            // Désactivation temporaire des états actifs
+            playersTracker[0].active = false;
+            playersTracker[1].active = false;
             handDivs[0].style.display = "none";
             handDivs[1].style.display = "none";
+            handDivs[0].className = "hand-cursor";
+            handDivs[1].className = "hand-cursor";
 
-            // --- EXTRACTION DE LA POSITION DES BOULES BLEUES ---
-            lastHandsData.forEach((landmarks, index) => {
-                if (index > 1) return;
-                
-                const palmPoint = landmarks[9]; // Centre de la main
-                const visualX = (1 - palmPoint.x) * GAME_WIDTH;
-                const visualY = palmPoint.y * GAME_HEIGHT;
-
-                // On stocke les coordonnées pour la boucle de collision physique
-                liveCursors[index].active = true;
-                liveCursors[index].x = visualX;
-                liveCursors[index].y = visualY;
-
-                // Affichage visuel du gros curseur de 80px (rayon 40)
-                const div = handDivs[index];
-                div.style.display = "block";
-                div.style.transform = `translate(${visualX - 40}px, ${visualY - 40}px)`;
+            // --- ALGORITHME DE SUIVI SPATIAL PAR ACCROCHAGE DE DISTANCE ---
+            let detectedHands = [];
+            
+            // Étape A: On extrait d'abord les coordonnées miroir brutes de toutes les mains lues par l'IA
+            lastHandsData.forEach((landmarks) => {
+                const palmPoint = landmarks[9];
+                const rawX = (1 - palmPoint.x) * GAME_WIDTH;
+                const rawY = palmPoint.y * GAME_HEIGHT;
+                detectedHands.push({ x: rawX, y: rawY });
             });
 
-            // --- VÉRIFICATION DE LA COLLISION ENTRE SPHÈRES ---
+            // Étape B: Si on est en Mode 2 Joueurs, on trie intelligemment par proximité spatiale
+            if (gameMode === 2 && detectedHands.length > 0) {
+                
+                // Si une seule main est détectée, on l'associe au joueur le plus proche d'elle
+                if (detectedHands.length === 1) {
+                    const hand = detectedHands[0];
+                    const distToJ1 = Math.hypot(hand.x - playersTracker[0].x, hand.y - playersTracker[0].y);
+                    const distToJ2 = Math.hypot(hand.x - playersTracker[1].x, hand.y - playersTracker[1].y);
+                    
+                    let targetIdx = distToJ1 < distToJ2 ? 0 : 1;
+                    
+                    // Si le joueur le plus proche n'a pas été vu depuis trop longtemps (2s), on applique le sens logique gauche/droite
+                    if (performance.now() - playersTracker[targetIdx].lastSeen > 2000) {
+                        targetIdx = hand.x < GAME_WIDTH / 2 ? 0 : 1;
+                    }
+
+                    playersTracker[targetIdx].active = true;
+                    playersTracker[targetIdx].x = hand.x;
+                    playersTracker[targetIdx].y = hand.y;
+                    playersTracker[targetIdx].lastSeen = performance.now();
+                } 
+                // Si deux mains sont détectées, on résout le croisement pour donner la bonne position au bon joueur
+                else if (detectedHands.length === 2) {
+                    const h0 = detectedHands[0];
+                    const h1 = detectedHands[1];
+
+                    // Option de liaison A : h0=J1, h1=J2
+                    const costA = Math.hypot(h0.x - playersTracker[0].x, h0.y - playersTracker[0].y) + 
+                                  Math.hypot(h1.x - playersTracker[1].x, h1.y - playersTracker[1].y);
+                    
+                    // Option de liaison B (Croisée) : h1=J1, h0=J2
+                    const costB = Math.hypot(h1.x - playersTracker[0].x, h1.y - playersTracker[0].y) + 
+                                  Math.hypot(h0.x - playersTracker[1].x, h0.y - playersTracker[1].y);
+
+                    if (costA < costB) {
+                        playersTracker[0].active = true; playersTracker[0].x = h0.x; playersTracker[0].y = h0.y;
+                        playersTracker[1].active = true; playersTracker[1].x = h1.x; playersTracker[1].y = h1.y;
+                    } else {
+                        playersTracker[0].active = true; playersTracker[0].x = h1.x; playersTracker[0].y = h1.y;
+                        playersTracker[1].active = true; playersTracker[1].x = h0.x; playersTracker[1].y = h0.y;
+                    }
+                    playersTracker[0].lastSeen = performance.now();
+                    playersTracker[1].lastSeen = performance.now();
+                }
+            } else {
+                // Mode Solo (1P) : On mappe bêtement sur les index natifs
+                detectedHands.forEach((hand, index) => {
+                    if (index > 1) return;
+                    playersTracker[index].active = true;
+                    playersTracker[index].x = hand.x;
+                    playersTracker[index].y = hand.y;
+                });
+            }
+
+            // Étape C: Rendu graphique basé sur notre tableau stabilisé playersTracker
+            playersTracker.forEach((player, index) => {
+                if (!player.active) return;
+                
+                const div = handDivs[index];
+                div.style.display = "block";
+                div.style.transform = `translate(${player.x - 40}px, ${player.y - 40}px)`;
+
+                if (gameMode === 1) {
+                    div.classList.add("color-p1");
+                } else {
+                    if (player.id === 0) div.classList.add("color-p1");
+                    if (player.id === 1) div.classList.add("color-p2");
+                }
+            });
+
+            // --- CALCULS COLLISION STABLES REBOND ---
             let handHit = false;
+            let hittingPlayerId = -1;
 
-            for (const cursor of liveCursors) {
-                if (!cursor.active) continue;
+            for (const player of playersTracker) {
+                if (!player.active || player.cooldown > 0) continue;
 
-                // Distance centre à centre entre la boule jaune et la boule bleue
-                const distance = Math.hypot(cursor.x - ball.x, cursor.y - ball.y);
-                const cursorRadius = 40; // La boule bleue fait 80px de large, donc 40px de rayon
+                const distance = Math.hypot(player.x - ball.x, player.y - ball.y);
+                const cursorRadius = 40; 
 
-                // Si la distance est plus petite que la somme des deux rayons, il y a impact !
-                // On garde la sécurité ball.vy > -1 pour éviter les rebonds infinis collés
                 if (distance < (ball.radius + cursorRadius) && ball.vy > -1) {
                     handHit = true;
-                    
-                    // Angle de rebond calculé à partir de la position de la boule bleue
-                    ball.vx = (ball.x - cursor.x) * 0.25; 
+                    hittingPlayerId = player.id; 
+                    player.cooldown = 15; 
+
+                    ball.vx = (ball.x - player.x) * 0.25; 
                     ball.vy = ball.bounceForce; 
                     ball.hitTimer = 8;
-                    break;
+                    break; 
                 }
             }
 
             if (handHit) {
-                score += 1;
-                scoreField.innerText = score;
-                
-                ball.bounceForce -= 0.25; 
+                if (gameMode === 1) {
+                    scoreSolo += 1;
+                    scoreField.innerText = scoreSolo;
+                } else {
+                    if (hittingPlayerId === 0) {
+                        scoreJ1 += 1;
+                        scoreJ1Field.innerText = scoreJ1;
+                    } else if (hittingPlayerId === 1) {
+                        scoreJ2 += 1;
+                        scoreJ2Field.innerText = scoreJ2;
+                    }
+                }
+
+                ball.bounceForce -= 0.20; 
                 ball.gravity += 0.01;
                 
                 const percentage = Math.round((ball.bounceForce / INITIAL_BOUNCE) * 100);
                 speedField.innerText = percentage + "%";
             }
 
-            // Rafraîchissement graphique du ballon
             ballEl.style.transform = `translate(${ball.x - ball.radius}px, ${ball.y - ball.radius}px)`;
             
             if (ball.hitTimer > 0) {
