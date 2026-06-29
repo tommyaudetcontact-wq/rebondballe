@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
-    <title>Rebond Ball Volley V4.3 - Plein Écran Tournoi</title>
+    <title>Rebond Ball Volley V4.6.2 - Fix Détection</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <style>
@@ -19,7 +19,6 @@
             color: #ffffff;
             font-family: sans-serif;
         }
-        /* DESIGN 100% PLEIN ÉCRAN NATION */
         .game-area {
             position: absolute;
             top: 0;
@@ -64,7 +63,6 @@
             background: rgba(255, 65, 54, 0.18);
             border-left: 1px dashed rgba(255,255,255,0.2);
         }
-        /* FILET ADAPTATIF : EXACTEMENT LA MOITIÉ DE L'ÉCRAN VERTICAL (50vh) */
         .net {
             position: absolute;
             bottom: 0;
@@ -78,12 +76,12 @@
         }
         #ball {
             position: absolute;
-            width: 80px;
-            height: 80px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             background: radial-gradient(circle at 30% 30%, #fff3cd, #ffc107 40%, #ba3c00);
             box-shadow: 0 10px 25px rgba(0,0,0,0.6);
-            z-index: 10;
+            z-index: 999; 
             pointer-events: none;
             left: 0;
             top: 0;
@@ -91,10 +89,9 @@
         #ball.hit {
             background: radial-gradient(circle at 30% 30%, #a3ffb4, #198754 40%, #0b4124);
         }
-        /* SMASH BROS TRACKER POSITIONNÉ DIRECTEMENT SOUS LE SCORE HUD */
         #offscreenBubble {
             position: absolute;
-            top: 85px; 
+            top: 95px; 
             width: 55px;
             height: 55px;
             background: radial-gradient(circle at 30% 30%, #fff, #ffc107 70%, #cc8500);
@@ -142,7 +139,6 @@
             background: rgba(255, 65, 54, 0.35);
             border: 3px dashed #ff4136;
         }
-        /* HUD EN SURCOUCHE DU MATCH */
         .hud-display {
             position: absolute;
             top: 10px;
@@ -152,6 +148,7 @@
             width: 90%;
             max-width: 650px;
             pointer-events: none;
+            transition: opacity 0.15s ease-in-out;
         }
         .card-hud {
             background: rgba(18, 18, 18, 0.85);
@@ -172,15 +169,11 @@
             align-items: center;
             padding: 20px;
         }
-        .text-white-score {
-            color: #ffffff !important;
-            font-weight: 800;
-        }
     </style>
 </head>
 <body>
 
-    <div class="hud-display text-center">
+    <div class="hud-display text-center" id="hudZone">
         <div class="card card-hud rounded p-2 shadow-lg">
             <div class="row align-items-center m-0">
                 <div class="col-4 text-start text-info fw-bold">
@@ -236,6 +229,7 @@
         const loadingOverlay = document.getElementById('loadingOverlay');
         const statusText = document.getElementById('statusText');
         const spinner = document.getElementById('spinner');
+        const hudZone = document.getElementById('hudZone');
         
         const scoreJ1Field = document.getElementById('scoreJ1Field');
         const scoreJ2Field = document.getElementById('scoreJ2Field');
@@ -252,39 +246,37 @@
         let lastVideoTime = -1;
         let frameCount = 0;
         let lastHandsData = [];
-        let gameMode = 1; 
         let isGameOverAnnulling = false;
+        
+        // CORRECTION DE LA VARIABLE COMMUNE GLOBALE RECONNUE PAR LES BOUTONS
+        window.gameMode = 2; 
 
-        // Points de la manche en cours
         let scoreJ1 = 0; let scoreJ2 = 0;
-        // Total de manches gagnées (premier à 3 gagne le match)
         let manchesJ1 = 0; let manchesJ2 = 0;
 
-        // Coordonnées calculées à la volée selon le format natif plein écran
-        let GAME_WIDTH = window.innerWidth;
-        let GAME_HEIGHT = window.innerHeight;
+        let GAME_WIDTH = window.innerWidth || 800;
+        let GAME_HEIGHT = window.innerHeight || 480;
         
-        const INITIAL_BOUNCE = -7.5; 
-        const INITIAL_GRAVITY = 0.28; 
+        const INITIAL_BOUNCE = -6.2;  
+        const INITIAL_GRAVITY = 0.35; 
 
         let ball = {
-            x: GAME_WIDTH / 2, y: 100, radius: 40,
+            x: GAME_WIDTH / 2, y: 120, 
+            radius: 25, 
             vx: 3, vy: 0,
             gravity: INITIAL_GRAVITY, 
             bounceForce: INITIAL_BOUNCE, 
             hitTimer: 0    
         };
 
-        // Algorithme de tracking V3 restauré à l'identique
         let playersTracker = [
             { id: 0, active: false, x: GAME_WIDTH * 0.25, y: GAME_HEIGHT * 0.5, cooldown: 0, lastSeen: 0 }, 
             { id: 1, active: false, x: GAME_WIDTH * 0.75, y: GAME_HEIGHT * 0.5, cooldown: 0, lastSeen: 0 }  
         ];
 
-        // Recalculer les proportions si l'appareil change d'orientation
         window.addEventListener('resize', () => {
-            GAME_WIDTH = window.innerWidth;
-            GAME_HEIGHT = window.innerHeight;
+            GAME_WIDTH = window.innerWidth || 800;
+            GAME_HEIGHT = window.innerHeight || 480;
         });
 
         async function initIA() {
@@ -300,19 +292,19 @@
                     minHandDetectionConfidence: 0.4,
                     minHandPresenceConfidence: 0.4
                 });
-                spinner.classList.add('d-none');
-                statusText.innerText = "Sélectionne la formule de jeu :";
-                menuButtons.classList.remove('d-none');
+                if(spinner) spinner.classList.add('d-none');
+                if(statusText) statusText.innerText = "Prêt pour le match !";
+                if(menuButtons) menuButtons.classList.remove('d-none');
             } catch (err) {
-                statusText.innerText = "Erreur : " + err;
+                if(statusText) statusText.innerText = "Erreur IA : " + err;
             }
         }
 
         async function launchGame(mode) {
-            gameMode = mode;
-            menuButtons.classList.add('d-none');
-            spinner.classList.remove('d-none');
-            statusText.innerText = "Ouverture de la caméra plein écran...";
+            window.gameMode = mode;
+            if(menuButtons) menuButtons.classList.add('d-none');
+            if(spinner) spinner.classList.remove('d-none');
+            if(statusText) statusText.innerText = "Lancement de la caméra...";
 
             resetScores();
             updateManchesDisplay();
@@ -323,70 +315,75 @@
                 });
                 video.srcObject = stream;
                 video.addEventListener('loadeddata', () => {
-                    loadingOverlay.classList.add('d-none');
+                    if(loadingOverlay) loadingOverlay.classList.add('d-none');
                     resetBall();
                     isGameOverAnnulling = false;
                     requestAnimationFrame(gameLoop);
                 });
             } catch (err) {
-                alert("Erreur de caméra.");
+                alert("Erreur caméra. Vérifie les autorisations de ton navigateur.");
             }
         }
 
         function updateManchesDisplay() {
-            manchesJ1El.innerText = "🟢 ".repeat(manchesJ1) + "⚪ ".repeat(3 - manchesJ1);
-            manchesJ2El.innerText = "🟢 ".repeat(manchesJ2) + "⚪ ".repeat(3 - manchesJ2);
+            if(manchesJ1El) manchesJ1El.innerText = "🟢 ".repeat(manchesJ1) + "⚪ ".repeat(3 - manchesJ1);
+            if(manchesJ2El) manchesJ2El.innerText = "🟢 ".repeat(manchesJ2) + "⚪ ".repeat(3 - manchesJ2);
         }
 
         function resetScores() {
             scoreJ1 = 0; scoreJ2 = 0;
-            scoreJ1Field.innerText = "0"; scoreJ2Field.innerText = "0";
+            if(scoreJ1Field) scoreJ1Field.innerText = "0";
+            if(scoreJ2Field) scoreJ2Field.innerText = "0";
             ball.bounceForce = INITIAL_BOUNCE;
             ball.gravity = INITIAL_GRAVITY;
-            speedField.innerText = "100% ";
+            if(speedField) speedField.innerText = "100%";
             playersTracker[0].x = GAME_WIDTH * 0.25; playersTracker[0].cooldown = 0;
             playersTracker[1].x = GAME_WIDTH * 0.75; playersTracker[1].cooldown = 0;
         }
 
-        btn1P.addEventListener('pointerdown', (e) => { e.preventDefault(); launchGame(1); });
-        btn2P.addEventListener('pointerdown', (e) => { e.preventDefault(); launchGame(2); });
+        if(btn1P) btn1P.addEventListener('pointerdown', (e) => { e.preventDefault(); launchGame(1); });
+        if(btn2P) btn2P.addEventListener('pointerdown', (e) => { e.preventDefault(); launchGame(2); });
 
         function triggerGameOver(losingArea) {
             isGameOverAnnulling = true;
-            bubbleEl.style.display = "none";
+            if(bubbleEl) bubbleEl.style.display = "none";
+            if(hudZone) hudZone.style.opacity = "1"; 
 
-            // Attribution du point de manche au gagnant
-            if (losingArea === "left") {
-                scoreJ2 += 1;
-                scoreJ2Field.innerText = scoreJ2;
-                statusText.innerHTML = "<span class='text-danger display-6 fw-bold'>🔴 POINT POUR LE JOUEUR 2 !</span>";
+            if (window.gameMode === 2) {
+                if (losingArea === "left") {
+                    scoreJ2 += 1;
+                    if(scoreJ2Field) scoreJ2Field.innerText = scoreJ2;
+                    if(statusText) statusText.innerHTML = "<span class='text-danger display-6 fw-bold'>🔴 POINT POUR LE JOUEUR 2 !</span>";
+                    manchesJ2++;
+                } else {
+                    scoreJ1 += 1;
+                    if(scoreJ1Field) scoreJ1Field.innerText = scoreJ1;
+                    if(statusText) statusText.innerHTML = "<span class='text-info display-6 fw-bold'>🔵 POINT POUR LE JOUEUR 1 !</span>";
+                    manchesJ1++;
+                }
             } else {
-                scoreJ1 += 1;
-                scoreJ1Field.innerText = scoreJ1;
-                statusText.innerHTML = "<span class='text-info display-6 fw-bold'>🔵 POINT POUR LE JOUEUR 1 !</span>";
+                if(statusText) statusText.innerHTML = "<span class='text-warning display-6 fw-bold'>💥 BALLE AU SOL !</span>";
             }
-
-            // Un point marqué valide immédiatement la manche pour le tournoi rapide
-            if (losingArea === "left") manchesJ2++; else manchesJ1++;
+            
             updateManchesDisplay();
 
-            loadingOverlay.classList.remove('d-none');
+            if(loadingOverlay) loadingOverlay.classList.remove('d-none');
             handDivs[0].style.display = "none";
             handDivs[1].style.display = "none";
 
-            // Vérification du sacre final (3 manches gagnées)
             if (manchesJ1 >= 3) {
-                statusText.innerHTML = "<span class='text-info display-4 fw-bold'>🏆 LE JOUEUR 1 GAGNE LE MATCH ! 🏆</span>";
+                if(statusText) statusText.innerHTML = "<span class='text-info display-4 fw-bold'>🏆 LE JOUEUR 1 REMPORTE LE MATCH ! 🏆</span>";
                 manchesJ1 = 0; manchesJ2 = 0;
             } else if (manchesJ2 >= 3) {
-                statusText.innerHTML = "<span class='text-danger display-4 fw-bold'>🏆 LE JOUEUR 2 GAGNE LE MATCH ! 🏆</span>";
+                if(statusText) statusText.innerHTML = "<span class='text-danger display-4 fw-bold'>🏆 LE JOUEUR 2 REMPORTE LE MATCH ! 🏆</span>";
                 manchesJ1 = 0; manchesJ2 = 0;
             }
 
             setTimeout(() => {
-                loadingOverlay.classList.add('d-none');
+                if(loadingOverlay) loadingOverlay.classList.add('d-none');
                 scoreJ1 = 0; scoreJ2 = 0;
-                scoreJ1Field.innerText = "0"; scoreJ2Field.innerText = "0";
+                if(scoreJ1Field) scoreJ1Field.innerText = "0";
+                if(scoreJ2Field) scoreJ2Field.innerText = "0";
                 updateManchesDisplay();
                 resetBall();
                 lastHandsData = []; 
@@ -403,14 +400,16 @@
             if (frameCount % 2 === 0 && video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
                 if (handLandmarker) {
-                    const detections = handLandmarker.detectForVideo(video, performance.now());
-                    if (detections && detections.landmarks) {
-                        lastHandsData = detections.landmarks;
-                    }
+                    try {
+                        const detections = handLandmarker.detectForVideo(video, performance.now());
+                        if (detections && detections.landmarks) {
+                            lastHandsData = detections.landmarks;
+                        }
+                    } catch(e) { /* Sécurité anti-crash IA */ }
                 }
             }
 
-            // --- PHYSIQUE (PLAFOND TOTALEMENT OUVERT) ---
+            // --- PHYSIQUE MOTEUR ---
             ball.vy += ball.gravity; 
             ball.x += ball.vx;
             ball.y += ball.vy;
@@ -418,16 +417,30 @@
             if (ball.x - ball.radius < 0) { ball.x = ball.radius; ball.vx *= -1; }
             else if (ball.x + ball.radius > GAME_WIDTH) { ball.x = GAME_WIDTH - ball.radius; ball.vx *= -1; }
 
-            // BULLE DE RECENTREMENT SMASH BROS
-            if (ball.y < 0) {
-                bubbleEl.style.display = "block";
-                bubbleEl.style.left = `${ball.x}px`; 
-                bubbleHeightText.innerText = Math.abs(Math.round(ball.y));
-            } else {
-                bubbleEl.style.display = "none";
+            // DETECTION COLLISION OVERLAP DU HUD
+            if(hudZone) {
+                const hudWidth = Math.min(GAME_WIDTH * 0.9, 650);
+                const hudLeft = (GAME_WIDTH - hudWidth) / 2;
+                const hudRight = hudLeft + hudWidth;
+                const hudBottom = 95;
+
+                if (ball.y - ball.radius < hudBottom && ball.x + ball.radius > hudLeft && ball.x - ball.radius < hudRight) {
+                    hudZone.style.opacity = "0"; 
+                } else {
+                    hudZone.style.opacity = "1";
+                }
             }
 
-            // FILET CENTRAL FIXÉ À 50% DE LA HAUTEUR DE L'ÉCRAN NATIVEMENT (GAME_HEIGHT * 0.5)
+            if (ball.y < 0) {
+                if(bubbleEl) {
+                    bubbleEl.style.display = "block";
+                    bubbleEl.style.left = `${ball.x}px`; 
+                }
+                if(bubbleHeightText) bubbleHeightText.innerText = Math.abs(Math.round(ball.y));
+            } else {
+                if(bubbleEl) bubbleEl.style.display = "none";
+            }
+
             const netTopY = GAME_HEIGHT * 0.5;
             if (ball.y + ball.radius > netTopY) {
                 if (Math.abs(ball.x - (GAME_WIDTH / 2)) < ball.radius + 6) {
@@ -452,13 +465,14 @@
 
             let detectedHands = [];
             lastHandsData.forEach((landmarks) => {
-                const palmPoint = landmarks[9];
-                const rawX = (1 - palmPoint.x) * GAME_WIDTH;
-                const rawY = palmPoint.y * GAME_HEIGHT;
-                detectedHands.push({ x: rawX, y: rawY });
+                if(landmarks && landmarks[9]) {
+                    const palmPoint = landmarks[9];
+                    const rawX = (1 - palmPoint.x) * GAME_WIDTH;
+                    const rawY = palmPoint.y * GAME_HEIGHT;
+                    detectedHands.push({ x: rawX, y: rawY });
+                }
             });
 
-            // RESTAURATION STRICT DE LA GESTION PAR DISTANCE EUCLIDIENNE DE LA V3
             if (detectedHands.length > 0) {
                 if (detectedHands.length === 1) {
                     const hand = detectedHands[0];
@@ -487,29 +501,30 @@
                 }
             }
 
-            // RENDU SANS OPTIMISATION SCRIPT (CONSERVE LA STABILITÉ CSS COMMANDE)
             playersTracker.forEach((player, index) => {
                 if (!player.active) return;
                 const div = handDivs[index];
-                div.style.display = "block";
-                div.style.left = (player.x - 40) + "px";
-                div.style.top = (player.y - 40) + "px";
-                
-                div.className = "hand-cursor";
-                if (gameMode === 1) {
-                    div.classList.add("color-p1");
-                } else {
-                    if (player.id === 0) div.classList.add("color-p1");
-                    if (player.id === 1) div.classList.add("color-p2");
+                if(div) {
+                    div.style.display = "block";
+                    div.style.left = (player.x - 40) + "px";
+                    div.style.top = (player.y - 40) + "px";
+                    
+                    div.className = "hand-cursor";
+                    if (window.gameMode === 1) {
+                        div.classList.add("color-p1");
+                    } else {
+                        if (player.id === 0) div.classList.add("color-p1");
+                        if (player.id === 1) div.classList.add("color-p2");
+                    }
                 }
             });
 
-            // --- SECTEURS ET COLLISIONS ---
+            // --- DEVIATIONS ET COLLISIONS ---
             let handHit = false;
             for (const player of playersTracker) {
                 if (!player.active || player.cooldown > 0) continue;
 
-                if (gameMode === 2) {
+                if (window.gameMode === 2) {
                     if (player.id === 0 && player.x > (GAME_WIDTH / 2)) continue;
                     if (player.id === 1 && player.x < (GAME_WIDTH / 2)) continue;
                 }
@@ -530,17 +545,19 @@
                 ball.bounceForce -= 0.10; 
                 ball.gravity += 0.005;
                 const percentage = Math.round((ball.bounceForce / INITIAL_BOUNCE) * 100);
-                speedField.innerText = percentage + "%";
+                if(speedField) speedField.innerText = percentage + "%";
             }
 
-            ballEl.style.left = (ball.x - ball.radius) + "px";
-            ballEl.style.top = (ball.y - ball.radius) + "px";
-            
-            if (ball.hitTimer > 0) {
-                ballEl.classList.add('hit');
-                ball.hitTimer--;
-            } else {
-                ballEl.classList.remove('hit');
+            if(ballEl) {
+                ballEl.style.left = (ball.x - ball.radius) + "px";
+                ballEl.style.top = (ball.y - ball.radius) + "px";
+                
+                if (ball.hitTimer > 0) {
+                    ballEl.classList.add('hit');
+                    ball.hitTimer--;
+                } else {
+                    ballEl.classList.remove('hit');
+                }
             }
 
             requestAnimationFrame(gameLoop);
@@ -553,7 +570,7 @@
             ball.vx = Math.random() > 0.5 ? 3.5 : -3.5; 
             ball.bounceForce = INITIAL_BOUNCE;
             ball.gravity = INITIAL_GRAVITY;
-            speedField.innerText = "100%";
+            if(speedField) speedField.innerText = "100%";
         }
 
         initIA();
