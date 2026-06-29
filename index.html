@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
-    <title>Rebond Ball Volley V4.6.2 - Fix Détection</title>
+    <title>Rebond Ball Volley V4.7 - Proportionnel 16:9</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <style>
@@ -18,15 +18,17 @@
             user-select: none;
             color: #ffffff;
             font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
+        /* CONTENEUR DE JEU TOUJOURS EN 16:9 CENTRÉ */
         .game-area {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
+            position: relative;
+            background: #0d0d1a;
             overflow: visible;
-            z-index: 1;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border: 2px solid #333;
         }
         .inner-container {
             position: relative;
@@ -68,7 +70,7 @@
             bottom: 0;
             left: calc(50% - 6px);
             width: 12px;
-            height: 50vh; 
+            height: 50%; /* Prend 50% de la hauteur de la zone de jeu */
             background: repeating-linear-gradient(0deg, #ffffff, #ffffff 10px, #333 10px, #333 20px);
             border: 2px solid #ffffff;
             box-shadow: 0 0 15px rgba(255,255,255,0.4);
@@ -79,7 +81,7 @@
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, #fff3cd, #ffc107 40%, #ba3c00);
+            background: radial-gradient(circle at 30% 30%, #fff3cd, #ffc107 40%, #ba3000);
             box-shadow: 0 10px 25px rgba(0,0,0,0.6);
             z-index: 999; 
             pointer-events: none;
@@ -194,7 +196,7 @@
         </div>
     </div>
 
-    <div class="game-area">
+    <div class="game-area" id="mainStage">
         <div id="offscreenBubble"><span class="bubble-text" id="bubbleHeight">0</span></div>
         
         <div class="inner-container">
@@ -230,6 +232,7 @@
         const statusText = document.getElementById('statusText');
         const spinner = document.getElementById('spinner');
         const hudZone = document.getElementById('hudZone');
+        const mainStage = document.getElementById('mainStage');
         
         const scoreJ1Field = document.getElementById('scoreJ1Field');
         const scoreJ2Field = document.getElementById('scoreJ2Field');
@@ -248,20 +251,20 @@
         let lastHandsData = [];
         let isGameOverAnnulling = false;
         
-        // CORRECTION DE LA VARIABLE COMMUNE GLOBALE RECONNUE PAR LES BOUTONS
         window.gameMode = 2; 
 
         let scoreJ1 = 0; let scoreJ2 = 0;
         let manchesJ1 = 0; let manchesJ2 = 0;
 
-        let GAME_WIDTH = window.innerWidth || 800;
-        let GAME_HEIGHT = window.innerHeight || 480;
+        let GAME_WIDTH = 800;
+        let GAME_HEIGHT = 450;
         
-        const INITIAL_BOUNCE = -6.2;  
-        const INITIAL_GRAVITY = 0.35; 
+        // MODIFICATION PHYSIQUE DE LA LÉGÈRETÉ DE LA BALLE ACCORDÉE
+        const INITIAL_BOUNCE = -8.0;  // Plus de rebond
+        const INITIAL_GRAVITY = 0.22; // Balle plus légère (vitesse V3)
 
         let ball = {
-            x: GAME_WIDTH / 2, y: 120, 
+            x: 400, y: 120, 
             radius: 25, 
             vx: 3, vy: 0,
             gravity: INITIAL_GRAVITY, 
@@ -270,14 +273,34 @@
         };
 
         let playersTracker = [
-            { id: 0, active: false, x: GAME_WIDTH * 0.25, y: GAME_HEIGHT * 0.5, cooldown: 0, lastSeen: 0 }, 
-            { id: 1, active: false, x: GAME_WIDTH * 0.75, y: GAME_HEIGHT * 0.5, cooldown: 0, lastSeen: 0 }  
+            { id: 0, active: false, x: 200, y: 225, cooldown: 0, lastSeen: 0 }, 
+            { id: 1, active: false, x: 600, y: 225, cooldown: 0, lastSeen: 0 }  
         ];
 
-        window.addEventListener('resize', () => {
-            GAME_WIDTH = window.innerWidth || 800;
-            GAME_HEIGHT = window.innerHeight || 480;
-        });
+        // LOGIQUE DE CALCUL DU RESOLUTION RESPONSIVE COMPLETEMENT UNIFIÉE (16:9 BASÉ SUR LE CÔTÉ LE MOINS LONG)
+        function resizeResponsiveStage() {
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+
+            // Déterminer le côté le moins long
+            if (screenW / screenH > 16 / 9) {
+                // Écran très large (PC) : Se calibrer sur la hauteur
+                GAME_HEIGHT = screenH;
+                GAME_WIDTH = screenH * (16 / 9);
+            } else {
+                // Écran vertical ou carré (Mobile/Tablette) : Se calibrer sur la largeur
+                GAME_WIDTH = screenW;
+                GAME_HEIGHT = screenW / (16 / 9);
+            }
+
+            // Assigner les tailles au conteneur principal CSS
+            mainStage.style.width = `${GAME_WIDTH}px`;
+            mainStage.style.height = `${GAME_HEIGHT}px`;
+        }
+
+        // Exécuter immédiatement au démarrage et lors du pivot de l'appareil
+        resizeResponsiveStage();
+        window.addEventListener('resize', resizeResponsiveStage);
 
         async function initIA() {
             try {
@@ -417,7 +440,7 @@
             if (ball.x - ball.radius < 0) { ball.x = ball.radius; ball.vx *= -1; }
             else if (ball.x + ball.radius > GAME_WIDTH) { ball.x = GAME_WIDTH - ball.radius; ball.vx *= -1; }
 
-            // DETECTION COLLISION OVERLAP DU HUD
+            // DETECTION COLLISION OVERLAP DU HUD RELATIVE À LA BOÎTE DU STAGE
             if(hudZone) {
                 const hudWidth = Math.min(GAME_WIDTH * 0.9, 650);
                 const hudLeft = (GAME_WIDTH - hudWidth) / 2;
@@ -441,6 +464,7 @@
                 if(bubbleEl) bubbleEl.style.display = "none";
             }
 
+            // LE FILET RESTE PARFAITEMENT AU MILIEU (50% de GAME_HEIGHT)
             const netTopY = GAME_HEIGHT * 0.5;
             if (ball.y + ball.radius > netTopY) {
                 if (Math.abs(ball.x - (GAME_WIDTH / 2)) < ball.radius + 6) {
@@ -565,7 +589,7 @@
 
         function resetBall() {
             ball.x = GAME_WIDTH / 2;
-            ball.y = 120;
+            ball.y = GAME_HEIGHT * 0.25; // Réapparition à 25% de la hauteur dynamique
             ball.vy = 1;
             ball.vx = Math.random() > 0.5 ? 3.5 : -3.5; 
             ball.bounceForce = INITIAL_BOUNCE;
